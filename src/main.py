@@ -21,7 +21,7 @@ from src.utils import chess_manager, GameContext
 # Can do things like load models from huggingface, make connections to subprocesses, etcwenis
  
 inf = 100_000
-TIME_LIMIT_SECONDS = 3.0  # target: ~3 seconds per move
+TIME_LIMIT_SECONDS = 0.5  # target: ~3 seconds per move
 CONSIDERED_MOVES_DEBUG: list[str] = []
 
 # =========================
