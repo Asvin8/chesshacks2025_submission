@@ -21,6 +21,7 @@ from src.utils import chess_manager, GameContext
 # Can do things like load models from huggingface, make connections to subprocesses, etcwenis
  
 inf = 100_000
+TIME_LIMIT_SECONDS = 3.0  # target: ~3 seconds per move
 CONSIDERED_MOVES_DEBUG: list[str] = []
 
 # =========================
@@ -38,7 +39,7 @@ PIECE_VALUES = {
 
 # max material loss we will allow a move to cause (in centipawns)
 # ~400 = about a minor piece
-MAX_ALLOWED_LOSS = 400
+MAX_ALLOWED_LOSS = 150
 
 
 def material_score(board: chess.Board, color: bool) -> int:
@@ -143,11 +144,16 @@ def alphabeta(
     beta: float,
     maximizing_player: bool,
     maximizing_color: bool,
+    search_start: float,
 ):
     """
     Alpha-beta pruning on a python-chess Board, using NN evaluation.
     Evaluation is always interpreted from the perspective of `maximizing_color`.
     """
+    # Time cutoff — return static eval from this node
+    if time.time() - search_start >= TIME_LIMIT_SECONDS:
+        return None, evaluate(board, maximizing_color)
+
     if depth == 0 or board.is_game_over():
         return None, evaluate(board, maximizing_color)
  
@@ -176,6 +182,7 @@ def alphabeta(
                 beta,
                 False,               # opponent is minimizing
                 maximizing_color,
+                search_start,
             )
             board.pop()
  
@@ -210,6 +217,7 @@ def alphabeta(
                 beta,
                 True,                # opponent is maximizing
                 maximizing_color,
+                search_start,
             )
             board.pop()
  
@@ -240,9 +248,12 @@ def test_func(ctx: GameContext) -> Move:
  
     # Root side to move = maximizing color
     maximizing_color = ctx.board.turn
+
+    # Start timer for this move
+    search_start = time.time()
  
     # Search with alpha-beta
-    search_depth = 4  # tune for speed/strength
+    search_depth = 4  # max depth; time limit will cut this off if needed
     best_move, best_eval = alphabeta(
         ctx.board,
         depth=search_depth,
@@ -250,6 +261,7 @@ def test_func(ctx: GameContext) -> Move:
         beta=inf,
         maximizing_player=True,        # side to move is maximizing
         maximizing_color=maximizing_color,
+        search_start=search_start,
     )
 
     # Debug: send considered moves to frontend
