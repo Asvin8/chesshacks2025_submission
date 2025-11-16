@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual envs
+venv/
+.venv/
+vchess/
+
+# Data / PGN files
+bot/src/data_generation/*.pgn
+
+# Misc
+*.log
