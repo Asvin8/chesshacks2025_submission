@@ -1,6 +1,6 @@
 
 # /Users/srirenukasayanthan/Desktop/chesshacks/my-chesshacks-bot/src/data_generation
-
+import os
 import csv
 import math
 from typing import List
@@ -163,10 +163,12 @@ def train(
     csv_path: str,
     batch_size: int = 256,
     lr: float = 1e-3,
-    num_epochs: int = 5,
+    num_epochs: int = 50,            # ⬅ default 50 now
     val_split: float = 0.1,
     num_workers: int = 2,
     device: str = None,
+    weights_path: str = "chess_cnn_eval.pt",
+    resume_if_exists: bool = True,
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -197,8 +199,22 @@ def train(
 
     # Model, loss, optimizer
     model = ChessCNN(in_channels=18).to(device)
+
+    # 🔁 Resume from existing weights if requested and file exists
+    if resume_if_exists and os.path.exists(weights_path):
+        print(f"Found existing weights at '{weights_path}'. Resuming training from them.")
+        state_dict = torch.load(weights_path, map_location=device)
+        model.load_state_dict(state_dict)
+    else:
+        if resume_if_exists:
+            print(f"No existing weights found at '{weights_path}'. Training from scratch.")
+        else:
+            print("resume_if_exists=False, training from scratch.")
+
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    base_name, ext = os.path.splitext(weights_path)
 
     for epoch in range(1, num_epochs + 1):
         # ---- Train ----
@@ -234,9 +250,15 @@ def train(
         val_loss /= max(len(val_loader), 1)
         print(f"Epoch {epoch} finished. Val Loss: {val_loss:.4f}")
 
-    # Save model at the end
-    torch.save(model.state_dict(), "chess_cnn_eval.pt")
-    print("Model saved to chess_cnn_eval.pt")
+        # ---- Save checkpoint every 10 epochs ----
+        if epoch % 10 == 0:
+            ckpt_path = f"{base_name}_epoch_{epoch}{ext}"
+            torch.save(model.state_dict(), ckpt_path)
+            print(f"Checkpoint saved to {ckpt_path}")
+
+    # Save final model at the end
+    torch.save(model.state_dict(), weights_path)
+    print(f"Final model saved to {weights_path}")
 
 
 # =========================
@@ -251,7 +273,7 @@ if __name__ == "__main__":
         csv_path=CSV_PATH,
         batch_size=256,
         lr=1e-3,
-        num_epochs=5,       # bump if you have time
+        num_epochs=50,       # bump if you have time
         val_split=0.1,
         num_workers=2,
     )

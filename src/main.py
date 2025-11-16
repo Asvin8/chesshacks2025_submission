@@ -1,4 +1,3 @@
-
 import sys
 import os
 
@@ -9,7 +8,6 @@ sys.path.append(BOT_DIR)
 
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, "data_generation", "chess_cnn_eval.pt")
 
-from .utils import chess_manager, GameContext
 import chess
 from chess import Move
 import random
@@ -23,6 +21,48 @@ from src.utils import chess_manager, GameContext
 # Can do things like load models from huggingface, make connections to subprocesses, etcwenis
  
 inf = 100_000
+CONSIDERED_MOVES_DEBUG: list[str] = []
+
+# =========================
+#  Material values + helpers
+# =========================
+
+PIECE_VALUES = {
+    chess.PAWN:   100,
+    chess.KNIGHT: 320,
+    chess.BISHOP: 330,
+    chess.ROOK:   500,
+    chess.QUEEN:  950,
+    chess.KING:   0,
+}
+
+# max material loss we will allow a move to cause (in centipawns)
+# ~400 = about a minor piece
+MAX_ALLOWED_LOSS = 400
+
+
+def material_score(board: chess.Board, color: bool) -> int:
+    """Total material for given color, in centipawns."""
+    score = 0
+    for piece_type, value in PIECE_VALUES.items():
+        score += len(board.pieces(piece_type, color)) * value
+    return score
+
+
+def is_move_too_bad(board: chess.Board, move: chess.Move, color: bool) -> bool:
+    """
+    Returns True if the move loses more than MAX_ALLOWED_LOSS material
+    for `color` in a static one-ply sense.
+    """
+    material_before = material_score(board, color)
+
+    board.push(move)
+    material_after = material_score(board, color)
+    board.pop()
+
+    loss = material_before - material_after
+    return loss > MAX_ALLOWED_LOSS
+
 
 class NNChessEvaluator:
     def __init__(self, weights_path="chess_cnn_eval.pt", device=None):
@@ -115,7 +155,19 @@ def alphabeta(
  
     if maximizing_player:
         value = -inf
-        for move in board.generate_legal_moves():
+
+        # collect legal moves once so we can handle "all moves filtered" case
+        legal_moves = list(board.generate_legal_moves())
+        filtered_moves: list[Move] = []
+        for m in legal_moves:
+            if not is_move_too_bad(board, m, maximizing_color):
+                filtered_moves.append(m)
+                CONSIDERED_MOVES_DEBUG.append(str(m))
+        if not filtered_moves:
+            # if everything is "too bad", we still have to search something
+            filtered_moves = legal_moves
+
+        for move in filtered_moves:
             board.push(move)
             _, score = alphabeta(
                 board,
@@ -139,7 +191,17 @@ def alphabeta(
  
     else:
         value = inf
-        for move in board.generate_legal_moves():
+
+        legal_moves = list(board.generate_legal_moves())
+        filtered_moves: list[Move] = []
+        for m in legal_moves:
+            if not is_move_too_bad(board, m, maximizing_color):
+                filtered_moves.append(m)
+                CONSIDERED_MOVES_DEBUG.append(str(m))
+        if not filtered_moves:
+            filtered_moves = legal_moves
+
+        for move in filtered_moves:
             board.push(move)
             _, score = alphabeta(
                 board,
@@ -189,6 +251,14 @@ def test_func(ctx: GameContext) -> Move:
         maximizing_player=True,        # side to move is maximizing
         maximizing_color=maximizing_color,
     )
+
+    # Debug: send considered moves to frontend
+    if CONSIDERED_MOVES_DEBUG:
+        ctx.logProbabilities({
+            f"considered_{i}: {mv}": 0.0
+            for i, mv in enumerate(CONSIDERED_MOVES_DEBUG)
+        })
+        CONSIDERED_MOVES_DEBUG.clear()
  
     if best_move is None:
         # Fallback: should basically never happen unless depth == 0
