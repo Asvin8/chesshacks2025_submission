@@ -30,11 +30,11 @@ async def get_move(request: Request):
     pgn = data["pgn"]
     timeleft = data["timeleft"]  # in milliseconds
 
-    chess_manager.set_context(pgn, timeleft)
     print("pgn", pgn)
 
+    start_time = time.perf_counter()
     try:
-        start_time = time.perf_counter()
+        chess_manager.set_context(pgn, timeleft)
         move, move_probs, logs = chess_manager.get_model_move()
         end_time = time.perf_counter()
         time_taken = (end_time - start_time) * 1000
@@ -58,7 +58,7 @@ async def get_move(request: Request):
 
     for m, prob in move_probs.items():
         if not isinstance(m, chess.Move) or not isinstance(prob, float):
-            return JSONResponse(content={m: None, "move_probs": None, "error": "Failed to get move", "message": "Move probabilities is not a dictionary"}, status_code=500)
+            return JSONResponse(content={"move": None, "move_probs": None, "error": "Failed to get move", "message": "Move probabilities is not a dictionary"}, status_code=500)
 
     # Translate move_probs to Dict[str, float]
     move_probs_dict = {move.uci(): prob for move, prob in move_probs.items()}

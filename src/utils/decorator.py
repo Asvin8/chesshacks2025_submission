@@ -63,15 +63,15 @@ class ChessManager:
 
     def set_context(self, pgn: str, timeleft: int):
 
-        game = read_game(io.StringIO(pgn))
-
-        if game == None:
-            raise ValueError("Invalid PGN")
-
-        # Reconstruct the board at the end of the mainline
-        board_at_end = game.board()
-        for move in game.mainline_moves():
-            board_at_end.push(move)
+        board_at_end = Board()
+        if pgn and pgn.strip():
+            game = read_game(io.StringIO(pgn))
+            if game is None:
+                raise ValueError("Invalid PGN")
+            # Reconstruct the board at the end of the mainline
+            board_at_end = game.board()
+            for move in game.mainline_moves():
+                board_at_end.push(move)
 
         self._ctx = GameContext(
             board=board_at_end,
